@@ -17,3 +17,22 @@
 
 - FastAPI backend plus static vanilla JS UI, matching the operational style of `../claude-session-viewer`.
 - Browsing of Codex state plus explicit confirmed deletion of selected sessions.
+- Project grouping by `threads.cwd`.
+- Thread list driven by `state_5.sqlite`.
+- Transcript rendering driven by rollout JSONL files.
+- Search across thread id, title, preview, first user message, and cwd.
+- Active/archived/all filter.
+- Internal-message toggle for developer/system/session records.
+- Raw JSONL link for exact transcript inspection.
+- Copyable `codex resume <thread-id>` command.
+- Live session rename with a built-in modal, backed by `codex-session-viewer-overrides.json` because Codex can regenerate `threads.title`.
+- Session viewer controls for manual refresh, jump to top, and jump to bottom.
+- Backup browsing by date, then project, then session.
+- WebSocket refresh when Codex state or session files change.
+- Startup, scheduled, and manual backups of:
+  - `state_5.sqlite`
+  - `goals_1.sqlite`
+  - `memories_1.sqlite`
+  - `logs_2.sqlite`
+  - `session_index.jsonl`
+  - `history.jsonl`
