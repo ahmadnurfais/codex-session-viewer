@@ -36,3 +36,29 @@
   - `logs_2.sqlite`
   - `session_index.jsonl`
   - `history.jsonl`
+  - `codex-session-viewer-overrides.json`
+  - `version.json`
+  - `sessions/`
+  - `archived_sessions/`
+
+## Deliberate Non-Goals For First Version
+
+- No manual archive/unarchive writes.
+- No deletion without a confirmation prompt.
+
+Codex already has `codex archive`, `codex unarchive`, and `codex delete` semantics. The viewer's delete path is deliberately narrow: it removes the thread row, transcript file, matching `session_index.jsonl`/`history.jsonl` rows, and shell snapshots for the selected UUID.
+
+Rename is intentionally narrower than delete: it only changes display metadata for live sessions, leaving transcript JSONL and recency timestamps intact.
+
+## Runtime
+
+- Docker Compose exposes the viewer at `http://localhost:8890`.
+- The Compose file mounts `/home/ahmadnurfais/.codex` to `/codex:rw` so confirmed live deletes can update Codex state.
+- Backups go to `/mnt/linux_data/backup/codex-backups`.
+- The container sets `TZ=Asia/Jakarta` so backup date folders follow local time.
+
+## Follow-Up Candidates
+
+- Add safe archive/unarchive by shelling out to the Codex CLI instead of hand-editing state.
+- Add transcript export to Markdown.
+- Add per-thread file/artifact inspection if Codex exposes stable file-change metadata in rollout events.
