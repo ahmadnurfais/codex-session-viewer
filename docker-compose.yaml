@@ -1,0 +1,17 @@
+services:
+  codex-session-viewer:
+    build: .
+    container_name: codex-session-viewer
+    ports:
+      - "8890:8000"
+    volumes:
+      - /home/ahmadnurfais/.codex:/codex:rw
+      - /mnt/linux_data/backup/codex-backups:/backups:rw
+    environment:
+      - CODEX_HOME=/codex
+      - HOST_CODEX_HOME=/home/ahmadnurfais/.codex
+      - CODEX_STATE_DB=/codex/state_5.sqlite
+      - BACKUP_DIR=/backups
+      - BACKUP_RETENTION_DAYS=30
+      - TZ=Asia/Jakarta
+    restart: unless-stopped
