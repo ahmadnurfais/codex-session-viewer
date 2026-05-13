@@ -1,3 +1,4 @@
+import json
 import os
 import sqlite3
 from datetime import datetime, timezone
@@ -9,17 +10,9 @@ from fastapi.staticfiles import StaticFiles
 
 app = FastAPI(title="Codex Session Viewer")
 
-
-def _default_codex_home() -> Path:
-    env_home = os.getenv("CODEX_HOME")
-    if env_home:
-        return Path(env_home).expanduser()
-    if Path("/codex").exists():
-        return Path("/codex")
-    return Path.home() / ".codex"
-
-
-CODEX_HOME = _default_codex_home()
+CODEX_HOME = Path(
+    os.getenv("CODEX_HOME", "/codex" if Path("/codex").exists() else str(Path.home() / ".codex"))
+).expanduser()
 HOST_CODEX_HOME = Path(os.getenv("HOST_CODEX_HOME", str(CODEX_HOME))).expanduser()
 STATE_DB = Path(os.getenv("CODEX_STATE_DB", str(CODEX_HOME / "state_5.sqlite"))).expanduser()
 STATIC_DIR = Path(__file__).parent / "static"
@@ -87,43 +80,128 @@ def _row_to_thread(row):
     }
 
 
+def _text_from_content(content):
+    if content is None:
+        return ""
+    if isinstance(content, str):
+        return content
+    if not isinstance(content, list):
+        return json.dumps(content, indent=2, ensure_ascii=False)
+    parts = []
+    for block in content:
+        if isinstance(block, dict):
+            parts.append(block.get("text") or block.get("content") or block.get("type") or "")
+        else:
+            parts.append(str(block))
+    return "\n".join(part for part in parts if part)
+
+
+def _parse_rollout(path: Path, include_internal: bool = False):
+    if not path.exists():
+        raise HTTPException(404, "Rollout file not found")
+    events = []
+    counts = {"raw": 0, "messages": 0, "tool_calls": 0, "tool_outputs": 0, "events": 0}
+    warnings = []
+    with path.open("r", encoding="utf-8", errors="replace") as handle:
+        for line_no, line in enumerate(handle, start=1):
+            if not line.strip():
+                continue
+            counts["raw"] += 1
+            try:
+                record = json.loads(line)
+            except json.JSONDecodeError as exc:
+                warnings.append(f"Line {line_no}: invalid JSON ({exc})")
+                continue
+            payload = record.get("payload", {})
+            record_type = record.get("type")
+            item_type = payload.get("type")
+            if record_type == "response_item" and item_type == "message":
+                role = payload.get("role") or "message"
+                text = _text_from_content(payload.get("content"))
+                if text or include_internal:
+                    events.append(
+                        {
+                            "id": f"line-{line_no}",
+                            "line": line_no,
+                            "timestamp": record.get("timestamp"),
+                            "kind": "message",
+                            "role": role,
+                            "text": text,
+                            "blocks": [{"type": "text", "text": text}],
+                        }
+                    )
+                    counts["messages"] += 1
+            elif record_type == "response_item" and item_type in {"function_call", "custom_tool_call"}:
+                events.append(
+                    {
+                        "id": f"line-{line_no}",
+                        "line": line_no,
+                        "timestamp": record.get("timestamp"),
+                        "kind": "tool_call",
+                        "role": "tool",
+                        "name": payload.get("name"),
+                        "call_id": payload.get("call_id"),
+                        "text": json.dumps(
+                            payload.get("arguments") or payload.get("input") or {},
+                            indent=2,
+                            ensure_ascii=False,
+                        ),
+                    }
+                )
+                counts["tool_calls"] += 1
+            elif record_type == "response_item" and item_type in {
+                "function_call_output",
+                "custom_tool_call_output",
+            }:
+                events.append(
+                    {
+                        "id": f"line-{line_no}",
+                        "line": line_no,
+                        "timestamp": record.get("timestamp"),
+                        "kind": "tool_output",
+                        "role": "tool_output",
+                        "call_id": payload.get("call_id"),
+                        "text": str(payload.get("output") or ""),
+                    }
+                )
+                counts["tool_outputs"] += 1
+            elif include_internal:
+                events.append(
+                    {
+                        "id": f"line-{line_no}",
+                        "line": line_no,
+                        "timestamp": record.get("timestamp"),
+                        "kind": "event",
+                        "role": "event",
+                        "text": json.dumps(record, indent=2, ensure_ascii=False),
+                    }
+                )
+                counts["events"] += 1
+    return {"events": events, "counts": counts, "warnings": warnings, "meta": {}}
+
+
 @app.get("/api/status")
 def api_status():
     with _connect_state() as conn:
         total = conn.execute("SELECT COUNT(*) FROM threads").fetchone()[0]
         archived = conn.execute("SELECT COUNT(*) FROM threads WHERE archived = 1").fetchone()[0]
         projects = conn.execute("SELECT COUNT(DISTINCT cwd) FROM threads").fetchone()[0]
-    return {
-        "threads": total,
-        "active_threads": total - archived,
-        "archived_threads": archived,
-        "projects": projects,
-    }
+    return {"threads": total, "active_threads": total - archived, "archived_threads": archived, "projects": projects}
 
 
 @app.get("/api/projects")
 def api_projects():
     with _connect_state() as conn:
         rows = conn.execute(
-            """
-            SELECT
-                cwd,
-                COUNT(*) AS total,
-                SUM(CASE WHEN archived = 0 THEN 1 ELSE 0 END) AS active,
-                SUM(CASE WHEN archived = 1 THEN 1 ELSE 0 END) AS archived,
-                MAX(recency_at_ms) AS latest_ms
-            FROM threads
-            GROUP BY cwd
-            ORDER BY latest_ms DESC, cwd ASC
-            """
+            "SELECT cwd, COUNT(*) AS total, MAX(recency_at_ms) AS latest_ms FROM threads GROUP BY cwd ORDER BY latest_ms DESC"
         ).fetchall()
     return {
         "projects": [
             {
                 "cwd": row["cwd"],
                 "total": row["total"],
-                "active": row["active"] or 0,
-                "archived": row["archived"] or 0,
+                "active": row["total"],
+                "archived": 0,
                 "latest_at": _ms_to_iso(row["latest_ms"]),
             }
             for row in rows
@@ -146,26 +224,27 @@ def api_threads(
         where.append("archived = 0")
     elif archived == "archived":
         where.append("archived = 1")
-    if q:
-        where.append(
-            """
-            (
-                lower(id) LIKE ?
-                OR lower(title) LIKE ?
-                OR lower(preview) LIKE ?
-                OR lower(first_user_message) LIKE ?
-                OR lower(cwd) LIKE ?
-            )
-            """
-        )
-        params.extend([f"%{q.lower()}%"] * 5)
     where_sql = f"WHERE {' AND '.join(where)}" if where else ""
     with _connect_state() as conn:
         rows = conn.execute(
             f"SELECT {THREAD_COLUMNS} FROM threads {where_sql} ORDER BY recency_at_ms DESC LIMIT 300",
             params,
         ).fetchall()
-    return {"threads": [_row_to_thread(row) for row in rows], "total": len(rows)}
+    threads = [_row_to_thread(row) for row in rows]
+    if q:
+        needle = q.lower()
+        threads = [thread for thread in threads if needle in str(thread).lower()]
+    return {"threads": threads, "total": len(threads)}
+
+
+@app.get("/api/threads/{thread_id}")
+def api_thread(thread_id: str, include_internal: bool = False):
+    with _connect_state() as conn:
+        row = conn.execute(f"SELECT {THREAD_COLUMNS} FROM threads WHERE id = ?", (thread_id,)).fetchone()
+    if not row:
+        raise HTTPException(404, "Thread not found")
+    thread = _row_to_thread(row)
+    return {"thread": thread, **_parse_rollout(Path(thread["local_rollout_path"]), include_internal)}
 
 
 @app.get("/api/threads/{thread_id}/raw", response_class=PlainTextResponse)
