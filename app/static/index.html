@@ -5,22 +5,50 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <title>Codex Session Viewer</title>
 <style>
+  *, *::before, *::after { box-sizing: border-box; }
   body { margin: 0; background: #0b0d10; color: #e7edf3; font: 14px/1.45 system-ui, sans-serif; }
-  header { height: 50px; display: flex; align-items: center; gap: 12px; padding: 0 14px; background: #12161b; border-bottom: 1px solid #2d3844; }
+  #app { display: grid; grid-template-columns: 280px 390px 1fr; grid-template-rows: 50px 1fr; height: 100vh; }
+  header { grid-column: 1 / -1; display: flex; align-items: center; gap: 12px; padding: 0 14px; background: #12161b; border-bottom: 1px solid #2d3844; }
   .brand { color: #6ea8fe; font-weight: 700; }
-  main { padding: 16px; }
+  .panel { min-width: 0; overflow: auto; border-right: 1px solid #2d3844; }
+  .panel-head { position: sticky; top: 0; background: #12161b; border-bottom: 1px solid #2d3844; padding: 10px 12px; }
+  input, select, button { font: inherit; }
+  input, select { width: 100%; color: #e7edf3; background: #191f26; border: 1px solid #2d3844; border-radius: 5px; padding: 6px 8px; }
+  .project-item, .thread-item { padding: 10px 12px; border-bottom: 1px solid #2d3844; cursor: pointer; }
+  .project-item:hover, .thread-item:hover, .active { background: #222a33; }
+  .item-title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .item-sub { color: #738292; font-size: 11px; margin-top: 3px; }
+  .empty { color: #738292; padding: 20px 14px; }
 </style>
 </head>
 <body>
-<header><div class="brand">Codex Session Viewer</div><div id="status">Loading...</div></header>
-<main id="messages">Choose a thread to inspect Codex history.</main>
+<div id="app">
+  <header><div class="brand">Codex Session Viewer</div><div id="status">Loading...</div></header>
+  <aside class="panel"><div class="panel-head"><button id="allProjectsBtn">All projects</button></div><div id="projectList"></div></aside>
+  <aside class="panel"><div class="panel-head"><input id="searchInput" type="search" placeholder="Search title, cwd, id" /></div><div id="threadList"></div></aside>
+  <main class="panel"><div class="panel-head"><div id="threadTitle">Select a thread</div></div><div id="messages"><div class="empty">Choose a project and thread.</div></div></main>
+</div>
 <script>
-async function init() {
-  const res = await fetch("/api/status");
-  const status = await res.json();
-  document.getElementById("status").textContent = `${status.active_threads || 0} active sessions`;
-}
-init().catch(error => { document.getElementById("messages").textContent = error.message; });
+const state = { projects: [], threads: [], selectedCwd: "", selectedThreadId: "", query: "" };
+const el = {
+  status: document.getElementById("status"), projectList: document.getElementById("projectList"), threadList: document.getElementById("threadList"),
+  searchInput: document.getElementById("searchInput"), allProjectsBtn: document.getElementById("allProjectsBtn"), threadTitle: document.getElementById("threadTitle"), messages: document.getElementById("messages")
+};
+function escapeHtml(value) { return String(value ?? "").replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;").replaceAll('"', "&quot;").replaceAll("'", "&#039;"); }
+async function fetchJson(url) { const res = await fetch(url); if (!res.ok) throw new Error(await res.text()); return res.json(); }
+function shortPath(path) { const parts = String(path || "").split("/").filter(Boolean); return parts.length > 2 ? parts.slice(-2).join("/") : path; }
+async function loadStatus() { const status = await fetchJson("/api/status"); el.status.textContent = `${status.active_threads} active | ${status.archived_threads} archived`; }
+async function loadProjects() { state.projects = (await fetchJson("/api/projects")).projects; renderProjects(); }
+async function loadThreads() { const params = new URLSearchParams(); if (state.selectedCwd) params.set("cwd", state.selectedCwd); if (state.query) params.set("q", state.query); state.threads = (await fetchJson(`/api/threads?${params}`)).threads; renderThreads(); }
+function renderProjects() { el.projectList.innerHTML = state.projects.map(project => `<div class="project-item" data-cwd="${escapeHtml(project.cwd)}"><div class="item-title">${escapeHtml(shortPath(project.cwd))}</div><div class="item-sub">${project.total} sessions</div></div>`).join("") || `<div class="empty">No projects found.</div>`; }
+function renderThreads() { el.threadList.innerHTML = state.threads.map(thread => `<div class="thread-item" data-id="${thread.id}"><div class="item-title">${escapeHtml(thread.title)}</div><div class="item-sub">${escapeHtml(shortPath(thread.cwd))}</div></div>`).join("") || `<div class="empty">No threads match this filter.</div>`; }
+el.projectList.addEventListener("click", event => { const item = event.target.closest(".project-item"); if (!item) return; state.selectedCwd = item.dataset.cwd || ""; loadThreads().catch(showError); });
+el.threadList.addEventListener("click", event => { const item = event.target.closest(".thread-item"); if (!item) return; state.selectedThreadId = item.dataset.id; el.threadTitle.textContent = state.selectedThreadId; el.messages.innerHTML = `<div class="empty">Loading thread...</div>`; });
+el.searchInput.addEventListener("input", () => { state.query = el.searchInput.value.trim(); loadThreads().catch(showError); });
+el.allProjectsBtn.addEventListener("click", () => { state.selectedCwd = ""; loadThreads().catch(showError); });
+function showError(error) { el.messages.innerHTML = `<div class="empty">${escapeHtml(error.message || error)}</div>`; }
+async function init() { await loadStatus(); await loadProjects(); await loadThreads(); }
+init().catch(showError);
 </script>
 </body>
 </html>
