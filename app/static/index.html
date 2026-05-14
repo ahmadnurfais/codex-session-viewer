@@ -1,0 +1,26 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Codex Session Viewer</title>
+<style>
+  body { margin: 0; background: #0b0d10; color: #e7edf3; font: 14px/1.45 system-ui, sans-serif; }
+  header { height: 50px; display: flex; align-items: center; gap: 12px; padding: 0 14px; background: #12161b; border-bottom: 1px solid #2d3844; }
+  .brand { color: #6ea8fe; font-weight: 700; }
+  main { padding: 16px; }
+</style>
+</head>
+<body>
+<header><div class="brand">Codex Session Viewer</div><div id="status">Loading...</div></header>
+<main id="messages">Choose a thread to inspect Codex history.</main>
+<script>
+async function init() {
+  const res = await fetch("/api/status");
+  const status = await res.json();
+  document.getElementById("status").textContent = `${status.active_threads || 0} active sessions`;
+}
+init().catch(error => { document.getElementById("messages").textContent = error.message; });
+</script>
+</body>
+</html>
