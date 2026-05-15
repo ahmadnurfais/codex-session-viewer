@@ -6,56 +6,1422 @@
 <title>Codex Session Viewer</title>
 <style>
   *, *::before, *::after { box-sizing: border-box; }
-  :root { --bg0: #0b0d10; --bg1: #12161b; --bg2: #191f26; --bg3: #222a33; --border: #2d3844; --text0: #e7edf3; --text1: #b4c0cc; --text2: #738292; --accent: #6ea8fe; --user: #62c486; --tool: #d6aa54; }
-  body { margin: 0; background: var(--bg0); color: var(--text0); font: 14px/1.45 system-ui, sans-serif; }
-  #app { display: grid; grid-template-columns: 280px 390px minmax(0, 1fr); grid-template-rows: 50px minmax(0, 1fr); height: 100vh; }
-  header { grid-column: 1 / -1; display: flex; align-items: center; gap: 12px; padding: 0 14px; background: var(--bg1); border-bottom: 1px solid var(--border); }
-  .brand { color: var(--accent); font-weight: 700; }
-  .panel { min-width: 0; overflow: auto; border-right: 1px solid var(--border); }
-  .panel-head { position: sticky; top: 0; background: var(--bg1); border-bottom: 1px solid var(--border); padding: 10px 12px; }
-  input, select, button { font: inherit; }
-  input, select { width: 100%; color: var(--text0); background: var(--bg2); border: 1px solid var(--border); border-radius: 5px; padding: 6px 8px; }
-  .project-item, .thread-item { padding: 10px 12px; border-bottom: 1px solid var(--border); cursor: pointer; }
-  .project-item:hover, .thread-item:hover, .active { background: var(--bg3); }
-  .item-title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .item-sub { color: var(--text2); font-size: 11px; margin-top: 3px; }
-  .empty { color: var(--text2); padding: 20px 14px; }
-  #messages { padding: 14px; display: flex; flex-direction: column; gap: 12px; }
-  .msg { border: 1px solid var(--border); border-radius: 6px; overflow: hidden; background: var(--bg1); }
-  .msg-head { padding: 6px 10px; border-bottom: 1px solid var(--border); background: var(--bg2); color: var(--text2); font-size: 11px; font-weight: 700; text-transform: uppercase; }
-  .msg-user .msg-head { color: var(--user); }
-  .msg-tool_call .msg-head, .msg-tool_output .msg-head { color: var(--tool); }
-  .msg-body { padding: 10px 12px; }
-  pre { margin: 0; white-space: pre-wrap; word-break: break-word; color: var(--text0); font: 12.5px/1.55 Consolas, Menlo, monospace; }
+  :root {
+    --bg0: #0b0d10;
+    --bg1: #12161b;
+    --bg2: #191f26;
+    --bg3: #222a33;
+    --bg4: #2b3540;
+    --border: #2d3844;
+    --text0: #e7edf3;
+    --text1: #b4c0cc;
+    --text2: #738292;
+    --accent: #6ea8fe;
+    --accent2: #3d8bfd;
+    --user: #62c486;
+    --assistant: #6ea8fe;
+    --tool: #d6aa54;
+    --event: #9aa7b5;
+    --danger: #dd5f5f;
+    --danger-hover: #bd4444;
+    --success: #62c486;
+    --backup-accent: #e8a84c;
+  }
+
+  html, body {
+    height: 100%;
+    margin: 0;
+    background: var(--bg0);
+    color: var(--text0);
+    font: 14px/1.45 system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  }
+
+  button, input, select {
+    font: inherit;
+  }
+
+  #app {
+    display: grid;
+    grid-template-columns: 280px 390px minmax(0, 1fr);
+    grid-template-rows: 50px minmax(0, 1fr);
+    height: 100vh;
+  }
+
+  header {
+    grid-column: 1 / -1;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 0 14px;
+    background: var(--bg1);
+    border-bottom: 1px solid var(--border);
+  }
+
+  .brand {
+    color: var(--accent);
+    font-weight: 700;
+    letter-spacing: 0.2px;
+    white-space: nowrap;
+  }
+
+  .status {
+    display: flex;
+    gap: 10px;
+    align-items: center;
+    min-width: 0;
+    color: var(--text2);
+    font-size: 12px;
+  }
+
+  .status strong { color: var(--text1); font-weight: 600; }
+  .sep { width: 1px; height: 20px; background: var(--border); }
+  .header-actions { margin-left: auto; display: flex; align-items: center; gap: 8px; }
+  .ws-dot { width: 8px; height: 8px; border-radius: 50%; background: #596472; }
+  .ws-dot.connected { background: var(--success); }
+
+  .mode-toggle { display: flex; gap: 2px; background: var(--bg3); border-radius: 5px; padding: 2px; }
+  .mode-btn {
+    border: 0;
+    cursor: pointer;
+    border-radius: 3px;
+    font-size: 11px;
+    font-weight: 700;
+    padding: 4px 10px;
+    background: transparent;
+    color: var(--text2);
+  }
+  .mode-btn.active { background: var(--bg1); color: var(--text0); }
+  .mode-btn.backup.active { color: var(--backup-accent); }
+
+  .panel {
+    min-width: 0;
+    min-height: 0;
+    overflow: auto;
+    border-right: 1px solid var(--border);
+    background: var(--bg0);
+  }
+
+  .panel:last-child { border-right: 0; }
+
+  .panel-head {
+    position: sticky;
+    top: 0;
+    z-index: 3;
+    background: var(--bg1);
+    border-bottom: 1px solid var(--border);
+    padding: 10px 12px;
+  }
+
+  .panel-title {
+    color: var(--text2);
+    text-transform: uppercase;
+    letter-spacing: 0.8px;
+    font-size: 11px;
+    font-weight: 700;
+    margin-bottom: 8px;
+  }
+
+  .toolbar {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+  }
+
+  .toolbar input,
+  .toolbar select {
+    width: 100%;
+    min-width: 0;
+    color: var(--text0);
+    background: var(--bg2);
+    border: 1px solid var(--border);
+    border-radius: 5px;
+    padding: 6px 8px;
+    outline: none;
+  }
+
+  .toolbar input:focus,
+  .toolbar select:focus { border-color: var(--accent); }
+
+  .btn {
+    border: 1px solid var(--border);
+    background: var(--bg3);
+    color: var(--text1);
+    border-radius: 5px;
+    padding: 6px 9px;
+    cursor: pointer;
+    font-size: 12px;
+    white-space: nowrap;
+  }
+
+  .btn:hover { background: var(--bg4); color: var(--text0); }
+  .btn.ghost { background: var(--bg4); color: var(--text1); }
+  .btn.ghost:hover { background: var(--bg3); color: var(--text0); }
+  .btn.primary { border-color: #315f9d; background: #183d68; color: #cfe3ff; }
+  .btn.primary:hover { background: #1f4f86; }
+  .btn.danger { border-color: #743434; background: var(--danger); color: #fff; }
+  .btn.danger:hover { background: var(--danger-hover); }
+  .btn:disabled { opacity: 0.55; cursor: not-allowed; }
+
+  ::-webkit-scrollbar { width: 6px; height: 6px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: #333; border-radius: 3px; }
+  ::-webkit-scrollbar-thumb:hover { background: #444; }
+
+  .project-item,
+  .thread-item {
+    padding: 10px 12px;
+    border-bottom: 1px solid var(--border);
+    cursor: pointer;
+  }
+
+  .project-item:hover,
+  .thread-item:hover { background: var(--bg2); }
+
+  .project-item.active,
+  .thread-item.active {
+    background: var(--bg3);
+    border-left: 3px solid var(--accent);
+    padding-left: 9px;
+  }
+
+  .backup-date-item.active {
+    border-left-color: var(--backup-accent);
+  }
+
+  .item-title {
+    color: var(--text0);
+    font-size: 13px;
+    line-height: 1.35;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .item-sub {
+    color: var(--text2);
+    font-size: 11px;
+    margin-top: 3px;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+
+  .cwd {
+    word-break: break-all;
+    white-space: normal;
+  }
+
+  .section-label {
+    color: var(--text2);
+    text-transform: uppercase;
+    letter-spacing: 0.8px;
+    font-size: 11px;
+    font-weight: 700;
+    padding: 10px 12px 6px;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .thread-list-action {
+    padding: 9px 12px;
+    border-bottom: 1px solid var(--border);
+    color: var(--backup-accent);
+    background: #16120c;
+    cursor: pointer;
+    font-size: 12px;
+    font-weight: 700;
+  }
+
+  .thread-list-action:hover { background: #20190f; }
+
+  #content {
+    background: var(--bg0);
+  }
+
+  .content-head {
+    position: sticky;
+    top: 0;
+    z-index: 4;
+    background: var(--bg1);
+    border-bottom: 1px solid var(--border);
+  }
+
+  .thread-summary {
+    padding: 10px 14px;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 10px;
+    align-items: start;
+  }
+
+  .thread-title {
+    font-size: 14px;
+    font-weight: 650;
+    color: var(--text0);
+    overflow-wrap: anywhere;
+  }
+
+  .thread-meta {
+    color: var(--text2);
+    font-size: 11px;
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
+    margin-top: 4px;
+  }
+
+  .content-actions {
+    display: flex;
+    gap: 6px;
+    justify-content: flex-end;
+    flex-wrap: wrap;
+  }
+
+  .content-nav {
+    display: flex;
+    gap: 3px;
+  }
+
+  .btn-nav {
+    border: 0;
+    cursor: pointer;
+    border-radius: 4px;
+    font-size: 13px;
+    padding: 4px 8px;
+    line-height: 1;
+    background: var(--bg4);
+    color: var(--text1);
+  }
+
+  .btn-nav:hover { background: var(--bg3); color: var(--text0); }
+  .btn-nav:disabled { opacity: 0.55; cursor: not-allowed; }
+
+  .toggle {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    color: var(--text2);
+    font-size: 12px;
+    white-space: nowrap;
+  }
+
+  #messages {
+    padding: 14px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+
+  .empty {
+    color: var(--text2);
+    padding: 20px 14px;
+  }
+
+  .msg {
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    overflow: hidden;
+    background: var(--bg1);
+  }
+
+  .msg-head {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 10px;
+    border-bottom: 1px solid var(--border);
+    background: var(--bg2);
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.6px;
+    color: var(--text2);
+    font-weight: 700;
+  }
+
+  .msg-user .msg-head { color: var(--user); background: #13251b; }
+  .msg-assistant .msg-head { color: var(--assistant); background: #142237; }
+  .msg-tool_call .msg-head { color: var(--tool); background: #2a2113; }
+  .msg-tool_output .msg-head { color: #c7b083; background: #211c14; }
+  .msg-event .msg-head { color: var(--event); }
+  .msg-reasoning .msg-head { color: #b6a6e8; background: #211d2b; }
+
+  .tool-pair-meta {
+    color: var(--text2);
+    font-size: 11px;
+    margin-bottom: 8px;
+    word-break: break-all;
+  }
+
+  .tool-section {
+    border: 1px solid var(--border);
+    border-radius: 5px;
+    background: var(--bg0);
+    overflow: hidden;
+  }
+
+  .tool-section + .tool-section { margin-top: 8px; }
+  .tool-section summary {
+    padding: 7px 9px;
+    background: var(--bg2);
+    border-bottom: 1px solid var(--border);
+    color: var(--text1);
+    font-size: 12px;
+    font-weight: 700;
+  }
+  .tool-section pre { padding: 9px; }
+  .tool-output-section summary { color: #d0b56f; background: #211c14; }
+
+  .patch-view {
+    font: 12.5px/1.45 "Cascadia Code", "Consolas", "Menlo", monospace;
+    background: var(--bg0);
+  }
+
+  .patch-row {
+    display: grid;
+    grid-template-columns: 52px minmax(0, 1fr);
+    min-height: 21px;
+  }
+
+  .patch-gutter {
+    color: var(--text2);
+    background: rgba(255,255,255,0.025);
+    border-right: 1px solid var(--border);
+    padding: 2px 8px;
+    text-align: right;
+    user-select: none;
+  }
+
+  .patch-code {
+    white-space: pre-wrap;
+    word-break: break-word;
+    padding: 2px 10px;
+  }
+
+  .patch-add .patch-code { background: #153821; color: #b8f2c8; }
+  .patch-add .patch-gutter { background: #102d1a; color: #78c88f; }
+  .patch-del .patch-code { background: #4a1e1e; color: #ffd0d0; }
+  .patch-del .patch-gutter { background: #351717; color: #e18888; }
+  .patch-file .patch-code { background: #1f2832; color: #9fc4ff; font-weight: 700; }
+  .patch-hunk .patch-code { background: #251f35; color: #d0c0ff; }
+  .patch-meta .patch-code { color: var(--text2); }
+
+  .msg-line {
+    margin-left: auto;
+    color: var(--text2);
+    font-weight: 500;
+    text-transform: none;
+    letter-spacing: 0;
+  }
+
+  .msg-body {
+    padding: 10px 12px;
+  }
+
+  .message-blocks {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  .message-image {
+    display: block;
+    max-width: min(100%, 860px);
+    max-height: 720px;
+    object-fit: contain;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    background: var(--bg0);
+  }
+
+  .message-image-link {
+    display: inline-block;
+    color: var(--accent);
+    font-size: 12px;
+    text-decoration: none;
+    margin-top: 4px;
+  }
+
+  .message-image-link:hover { text-decoration: underline; }
+
+  pre {
+    margin: 0;
+    white-space: pre-wrap;
+    word-break: break-word;
+    color: var(--text0);
+    font: 12.5px/1.55 "Cascadia Code", "Consolas", "Menlo", monospace;
+  }
+
+  details pre {
+    margin-top: 8px;
+    max-height: 420px;
+    overflow: auto;
+  }
+
+  summary {
+    cursor: pointer;
+    color: var(--text1);
+    user-select: none;
+  }
+
+  .warning {
+    border: 1px solid #62452a;
+    background: #21190f;
+    color: #e6bc7a;
+    border-radius: 6px;
+    padding: 9px 12px;
+    font-size: 12px;
+  }
+
+  .modal-overlay {
+    display: none;
+    position: fixed;
+    inset: 0;
+    z-index: 100;
+    align-items: center;
+    justify-content: center;
+    background: rgba(0, 0, 0, 0.7);
+  }
+
+  .modal-overlay.open { display: flex; }
+
+  .modal {
+    width: min(440px, calc(100vw - 32px));
+    background: var(--bg2);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 22px;
+    box-shadow: 0 18px 50px rgba(0, 0, 0, 0.35);
+  }
+
+  .modal h3 {
+    margin: 0 0 8px;
+    font-size: 15px;
+  }
+
+  .modal p {
+    margin: 0 0 14px;
+    color: var(--text1);
+    font-size: 13px;
+    line-height: 1.5;
+  }
+
+  .modal-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 8px;
+    margin-top: 16px;
+  }
+
+  .rename-input {
+    width: 100%;
+    color: var(--text0);
+    background: var(--bg1);
+    border: 1px solid var(--border);
+    border-radius: 5px;
+    padding: 8px 10px;
+    outline: none;
+  }
+
+  .rename-input:focus { border-color: var(--accent); }
+
+  .modal-error {
+    min-height: 17px;
+    margin-top: 8px;
+    color: var(--danger);
+    font-size: 12px;
+  }
+
+  @media (max-width: 980px) {
+    #app {
+      grid-template-columns: 220px minmax(0, 1fr);
+      grid-template-rows: 50px 42vh minmax(0, 1fr);
+    }
+    #projects { grid-column: 1; grid-row: 2; }
+    #threads { grid-column: 2; grid-row: 2; }
+    #content { grid-column: 1 / -1; grid-row: 3; }
+  }
+
+  @media (max-width: 720px) {
+    #app {
+      grid-template-columns: 1fr;
+      grid-template-rows: auto 26vh 30vh minmax(0, 1fr);
+    }
+    header { min-height: 50px; flex-wrap: wrap; padding: 8px 10px; }
+    .header-actions { margin-left: 0; }
+    #projects { grid-column: 1; grid-row: 2; }
+    #threads { grid-column: 1; grid-row: 3; }
+    #content { grid-column: 1; grid-row: 4; }
+  }
 </style>
 </head>
 <body>
 <div id="app">
-  <header><div class="brand">Codex Session Viewer</div><div id="status">Loading...</div></header>
-  <aside class="panel"><div class="panel-head"><button id="allProjectsBtn">All projects</button></div><div id="projectList"></div></aside>
-  <aside class="panel"><div class="panel-head"><input id="searchInput" type="search" placeholder="Search title, cwd, id" /></div><div id="threadList"></div></aside>
-  <main class="panel"><div class="panel-head"><div id="threadTitle">Select a thread</div></div><div id="messages"><div class="empty">Choose a project and thread.</div></div></main>
+  <header>
+    <div class="brand">Codex Session Viewer</div>
+    <div class="sep"></div>
+    <div class="mode-toggle">
+      <button class="mode-btn active" id="liveModeBtn">Live</button>
+      <button class="mode-btn backup" id="backupModeBtn">Backups</button>
+    </div>
+    <div class="sep"></div>
+    <div class="status" id="status">Loading...</div>
+    <div class="header-actions">
+      <button class="btn primary" id="backupBtn">Backup now</button>
+      <span class="ws-dot" id="wsDot" title="Live refresh"></span>
+    </div>
+  </header>
+
+  <aside class="panel" id="projects">
+    <div class="panel-head">
+      <div class="panel-title" id="leftPanelTitle">Projects</div>
+      <div class="toolbar">
+        <button class="btn" id="allProjectsBtn">All projects</button>
+      </div>
+    </div>
+    <div id="projectList"></div>
+  </aside>
+
+  <aside class="panel" id="threads">
+    <div class="panel-head">
+      <div class="panel-title" id="threadPanelTitle">Threads</div>
+      <div class="toolbar">
+        <input id="searchInput" type="search" placeholder="Search title, cwd, id" />
+        <select id="archiveFilter">
+          <option value="active">Active</option>
+          <option value="archived">Archived</option>
+          <option value="all">All</option>
+        </select>
+      </div>
+    </div>
+    <div id="threadList"></div>
+  </aside>
+
+  <main class="panel" id="content">
+    <div class="content-head" id="contentHead">
+      <div class="thread-summary">
+        <div>
+          <div class="thread-title" id="threadTitle">Select a thread</div>
+          <div class="thread-meta" id="threadMeta"></div>
+        </div>
+        <div class="content-actions">
+          <div class="content-nav">
+            <button class="btn-nav" id="refreshThreadBtn" title="Refresh session" disabled>↺</button>
+            <button class="btn-nav" id="scrollTopBtn" title="Go to top" disabled>↑</button>
+            <button class="btn-nav" id="scrollBottomBtn" title="Go to bottom" disabled>↓</button>
+          </div>
+          <label class="toggle">
+            <input type="checkbox" id="internalToggle" />
+            Internal
+          </label>
+          <button class="btn" id="renameThreadBtn" disabled>Rename</button>
+          <button class="btn" id="copyResumeBtn" disabled>Copy resume</button>
+          <button class="btn danger" id="deleteThreadBtn" disabled>Delete</button>
+          <a class="btn" id="rawLink" target="_blank" rel="noreferrer" style="text-decoration:none; pointer-events:none; opacity:0.55;">Raw JSONL</a>
+        </div>
+      </div>
+    </div>
+    <div id="messages">
+      <div class="empty">Choose a project and thread to inspect Codex history.</div>
+    </div>
+  </main>
 </div>
+
+<div class="modal-overlay" id="renameModal">
+  <div class="modal" role="dialog" aria-modal="true" aria-labelledby="renameModalTitle">
+    <h3 id="renameModalTitle">Rename Session</h3>
+    <p>Enter a new title for this live Codex session.</p>
+    <input type="text" id="renameInput" class="rename-input" placeholder="Session title..." maxlength="240" />
+    <div class="modal-error" id="renameError"></div>
+    <div class="modal-actions">
+      <button class="btn ghost" id="renameCancelBtn">Cancel</button>
+      <button class="btn primary" id="renameConfirmBtn">Rename</button>
+    </div>
+  </div>
+</div>
+
 <script>
-const state = { projects: [], threads: [], selectedCwd: "", selectedThreadId: "", query: "", includeInternal: false };
-const el = { status: document.getElementById("status"), projectList: document.getElementById("projectList"), threadList: document.getElementById("threadList"), searchInput: document.getElementById("searchInput"), allProjectsBtn: document.getElementById("allProjectsBtn"), threadTitle: document.getElementById("threadTitle"), messages: document.getElementById("messages") };
-function escapeHtml(value) { return String(value ?? "").replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;").replaceAll('"', "&quot;").replaceAll("'", "&#039;"); }
-async function fetchJson(url) { const res = await fetch(url); if (!res.ok) throw new Error(await res.text()); return res.json(); }
-function shortPath(path) { const parts = String(path || "").split("/").filter(Boolean); return parts.length > 2 ? parts.slice(-2).join("/") : path; }
-async function loadStatus() { const status = await fetchJson("/api/status"); el.status.textContent = `${status.active_threads} active | ${status.archived_threads} archived`; }
-async function loadProjects() { state.projects = (await fetchJson("/api/projects")).projects; renderProjects(); }
-async function loadThreads() { const params = new URLSearchParams(); if (state.selectedCwd) params.set("cwd", state.selectedCwd); if (state.query) params.set("q", state.query); state.threads = (await fetchJson(`/api/threads?${params}`)).threads; renderThreads(); }
-async function loadThread(threadId) { state.selectedThreadId = threadId; const data = await fetchJson(`/api/threads/${encodeURIComponent(threadId)}`); el.threadTitle.textContent = data.thread.title || data.thread.id; el.messages.innerHTML = data.events.map(renderEvent).join("") || `<div class="empty">No displayable transcript events.</div>`; }
-function renderProjects() { el.projectList.innerHTML = state.projects.map(project => `<div class="project-item" data-cwd="${escapeHtml(project.cwd)}"><div class="item-title">${escapeHtml(shortPath(project.cwd))}</div><div class="item-sub">${project.total} sessions</div></div>`).join("") || `<div class="empty">No projects found.</div>`; }
-function renderThreads() { el.threadList.innerHTML = state.threads.map(thread => `<div class="thread-item" data-id="${thread.id}"><div class="item-title">${escapeHtml(thread.title)}</div><div class="item-sub">${escapeHtml(shortPath(thread.cwd))}</div></div>`).join("") || `<div class="empty">No threads match this filter.</div>`; }
-function renderEvent(event) { const cls = event.kind === "message" ? event.role : event.kind; return `<article class="msg msg-${escapeHtml(cls)}"><div class="msg-head">${escapeHtml(event.role || event.kind)} · line ${escapeHtml(event.line)}</div><div class="msg-body"><pre>${escapeHtml(event.text)}</pre></div></article>`; }
-el.projectList.addEventListener("click", event => { const item = event.target.closest(".project-item"); if (!item) return; state.selectedCwd = item.dataset.cwd || ""; loadThreads().catch(showError); });
-el.threadList.addEventListener("click", event => { const item = event.target.closest(".thread-item"); if (!item) return; loadThread(item.dataset.id).catch(showError); });
-el.searchInput.addEventListener("input", () => { state.query = el.searchInput.value.trim(); loadThreads().catch(showError); });
-el.allProjectsBtn.addEventListener("click", () => { state.selectedCwd = ""; loadThreads().catch(showError); });
-function showError(error) { el.messages.innerHTML = `<div class="empty">${escapeHtml(error.message || error)}</div>`; }
-async function init() { await loadStatus(); await loadProjects(); await loadThreads(); }
-init().catch(showError);
+const state = {
+  mode: "live",
+  projects: [],
+  backups: [],
+  backupProjects: [],
+  threads: [],
+  selectedCwd: "",
+  selectedBackupDate: "",
+  selectedBackupProjectCwd: "",
+  selectedThreadId: "",
+  selectedThread: null,
+  includeInternal: false,
+  query: "",
+  archived: "active",
+  status: null
+};
+
+const el = {
+  liveModeBtn: document.getElementById("liveModeBtn"),
+  backupModeBtn: document.getElementById("backupModeBtn"),
+  status: document.getElementById("status"),
+  backupBtn: document.getElementById("backupBtn"),
+  wsDot: document.getElementById("wsDot"),
+  leftPanelTitle: document.getElementById("leftPanelTitle"),
+  threadPanelTitle: document.getElementById("threadPanelTitle"),
+  allProjectsBtn: document.getElementById("allProjectsBtn"),
+  projectList: document.getElementById("projectList"),
+  searchInput: document.getElementById("searchInput"),
+  archiveFilter: document.getElementById("archiveFilter"),
+  threadList: document.getElementById("threadList"),
+  threadTitle: document.getElementById("threadTitle"),
+  threadMeta: document.getElementById("threadMeta"),
+  content: document.getElementById("content"),
+  messages: document.getElementById("messages"),
+  internalToggle: document.getElementById("internalToggle"),
+  refreshThreadBtn: document.getElementById("refreshThreadBtn"),
+  scrollTopBtn: document.getElementById("scrollTopBtn"),
+  scrollBottomBtn: document.getElementById("scrollBottomBtn"),
+  renameThreadBtn: document.getElementById("renameThreadBtn"),
+  renameModal: document.getElementById("renameModal"),
+  renameInput: document.getElementById("renameInput"),
+  renameError: document.getElementById("renameError"),
+  renameCancelBtn: document.getElementById("renameCancelBtn"),
+  renameConfirmBtn: document.getElementById("renameConfirmBtn"),
+  copyResumeBtn: document.getElementById("copyResumeBtn"),
+  deleteThreadBtn: document.getElementById("deleteThreadBtn"),
+  rawLink: document.getElementById("rawLink")
+};
+
+function escapeHtml(value) {
+  return String(value ?? "")
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#039;");
+}
+
+function fmtDate(value) {
+  if (!value) return "";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+  return date.toLocaleString();
+}
+
+function shortPath(path) {
+  if (!path) return "";
+  const parts = path.split("/").filter(Boolean);
+  if (parts.length <= 2) return path;
+  return parts.slice(-2).join("/");
+}
+
+function bytes(value) {
+  if (!value && value !== 0) return "";
+  if (value < 1024) return `${value} B`;
+  if (value < 1024 * 1024) return `${(value / 1024).toFixed(1)} KB`;
+  return `${(value / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+async function fetchJson(url, options = {}) {
+  const res = await fetch(url, options);
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(text || `${res.status} ${res.statusText}`);
+  }
+  return res.json();
+}
+
+async function loadStatus() {
+  state.status = await fetchJson("/api/status");
+  const latest = state.status.latest_activity ? fmtDate(state.status.latest_activity) : "none";
+  const backup = state.status.latest_backup?.date || "no backup";
+  el.status.innerHTML = `
+    <span><strong>${state.status.active_threads}</strong> active</span>
+    <span><strong>${state.status.archived_threads}</strong> archived</span>
+    <span><strong>${state.status.projects}</strong> projects</span>
+    <span>latest <strong>${escapeHtml(latest)}</strong></span>
+    <span>backup <strong>${escapeHtml(backup)}</strong></span>
+  `;
+  el.backupBtn.disabled = Boolean(state.status.backup_running);
+}
+
+async function loadProjects() {
+  const data = await fetchJson("/api/projects");
+  state.projects = data.projects;
+  renderProjects();
+}
+
+async function loadBackups() {
+  const data = await fetchJson("/api/backups");
+  state.backups = data.backups || [];
+  renderProjects();
+}
+
+async function loadBackupProjects() {
+  if (state.mode !== "backup" || !state.selectedBackupDate) {
+    state.backupProjects = [];
+    renderBackupProjects();
+    return;
+  }
+  el.threadPanelTitle.textContent = "Backup Projects";
+  el.threadList.innerHTML = `<div class="empty">Loading backup projects...</div>`;
+  const data = await fetchJson(`/api/backups/${encodeURIComponent(state.selectedBackupDate)}/projects`);
+  state.backupProjects = data.projects || [];
+  renderBackupProjects();
+}
+
+async function refreshBackupMiddle() {
+  if (state.mode !== "backup") {
+    await loadThreads();
+    return;
+  }
+  if (!state.selectedBackupDate) {
+    state.backupProjects = [];
+    state.threads = [];
+    renderBackupProjects();
+    return;
+  }
+  if (state.selectedBackupProjectCwd) {
+    await loadThreads();
+    return;
+  }
+  await loadBackupProjects();
+}
+
+function renderProjects() {
+  if (state.mode === "backup") {
+    el.leftPanelTitle.textContent = "Backup Dates";
+    el.allProjectsBtn.style.display = "none";
+    if (!state.backups.length) {
+      el.projectList.innerHTML = `<div class="empty">No backups yet.</div>`;
+      return;
+    }
+    el.projectList.innerHTML = state.backups.map(backup => `
+      <div class="project-item backup-date-item ${backup.date === state.selectedBackupDate ? "active" : ""}" data-date="${escapeHtml(backup.date)}">
+        <div class="item-title">${escapeHtml(backup.date)}</div>
+        <div class="item-sub">
+          <span>${backup.thread_count || 0} threads</span>
+          <span>${backup.project_count || 0} projects</span>
+          <span>${escapeHtml(backup.trigger || "backup")}</span>
+        </div>
+        <div class="item-sub">${escapeHtml(fmtDate(backup.timestamp))}</div>
+      </div>
+    `).join("");
+    return;
+  }
+
+  el.leftPanelTitle.textContent = "Projects";
+  el.allProjectsBtn.style.display = "";
+  el.allProjectsBtn.classList.toggle("primary", state.selectedCwd === "");
+  el.projectList.innerHTML = state.projects.map(project => `
+    <div class="project-item ${project.cwd === state.selectedCwd ? "active" : ""}" data-cwd="${escapeHtml(project.cwd)}">
+      <div class="item-title cwd">${escapeHtml(shortPath(project.cwd))}</div>
+      <div class="item-sub">
+        <span>${project.active} active</span>
+        <span>${project.archived} archived</span>
+        <span>${escapeHtml(fmtDate(project.latest_at))}</span>
+      </div>
+    </div>
+  `).join("") || `<div class="empty">No Codex projects found.</div>`;
+}
+
+function filteredBackupProjects() {
+  if (!state.query) return state.backupProjects;
+  const needle = state.query.toLowerCase();
+  return state.backupProjects.filter(project =>
+    String(project.cwd || "").toLowerCase().includes(needle) ||
+    String(project.name || "").toLowerCase().includes(needle)
+  );
+}
+
+function renderBackupProjects() {
+  if (state.mode !== "backup") return;
+  el.threadPanelTitle.textContent = "Backup Projects";
+  state.threads = [];
+  state.selectedThreadId = "";
+  state.selectedThread = null;
+
+  if (!state.selectedBackupDate) {
+    el.threadList.innerHTML = `<div class="empty">Select a backup date.</div>`;
+    return;
+  }
+
+  const projects = filteredBackupProjects();
+  if (!projects.length) {
+    el.threadList.innerHTML = `<div class="empty">No projects match this backup filter.</div>`;
+    return;
+  }
+
+  el.threadList.innerHTML = `
+    <div class="section-label">Projects in ${escapeHtml(state.selectedBackupDate)}</div>
+    ${projects.map(project => `
+      <div class="thread-item backup-project-item ${project.cwd === state.selectedBackupProjectCwd ? "active backup-date-item" : ""}" data-cwd="${escapeHtml(project.cwd)}">
+        <div class="item-title cwd">${escapeHtml(shortPath(project.cwd))}</div>
+        <div class="item-sub">
+          <span>${project.total || 0} sessions</span>
+          <span>${project.active || 0} active</span>
+          <span>${project.archived || 0} archived</span>
+          <span>${escapeHtml(fmtDate(project.latest_at))}</span>
+        </div>
+      </div>
+    `).join("")}
+  `;
+}
+
+function selectedBackupProject() {
+  return state.backupProjects.find(project => project.cwd === state.selectedBackupProjectCwd) || null;
+}
+
+function backupThreadListPrefix(total) {
+  if (state.mode !== "backup" || !state.selectedBackupProjectCwd) return "";
+  const project = selectedBackupProject();
+  const label = project ? shortPath(project.cwd) : shortPath(state.selectedBackupProjectCwd);
+  return `
+    <div class="thread-list-action backup-project-back" data-action="backup-projects">Back to backup projects</div>
+    <div class="section-label">${escapeHtml(label)} · ${total} session${total === 1 ? "" : "s"}</div>
+  `;
+}
+
+async function loadThreads() {
+  const params = new URLSearchParams();
+  if (state.selectedCwd) params.set("cwd", state.selectedCwd);
+  params.set("archived", state.archived);
+  if (state.query) params.set("q", state.query);
+  let url = `/api/threads?${params.toString()}`;
+  if (state.mode === "backup") {
+    if (!state.selectedBackupDate || !state.selectedBackupProjectCwd) {
+      state.threads = [];
+      renderBackupProjects();
+      return;
+    }
+    params.set("cwd", state.selectedBackupProjectCwd);
+    url = `/api/backups/${encodeURIComponent(state.selectedBackupDate)}/threads?${params.toString()}`;
+  }
+  const data = await fetchJson(url);
+  state.threads = data.threads;
+  renderThreads(data.total);
+}
+
+function renderThreads(total) {
+  const prefix = backupThreadListPrefix(total);
+  el.threadPanelTitle.textContent = state.mode === "backup" ? "Backup Sessions" : "Threads";
+  if (!state.threads.length) {
+    el.threadList.innerHTML = `${prefix}<div class="empty">No threads match this filter.</div>`;
+    return;
+  }
+  el.threadList.innerHTML = prefix + state.threads.map(thread => {
+    const missing = thread.rollout_exists ? "" : "missing transcript";
+    return `
+      <div class="thread-item ${thread.id === state.selectedThreadId ? "active" : ""}" data-id="${thread.id}">
+        <div class="item-title">${escapeHtml(thread.title || thread.id)}</div>
+        <div class="item-sub">
+          <span>${escapeHtml(thread.source || "")}</span>
+          <span>${escapeHtml(thread.model || "")}</span>
+          <span>${escapeHtml(fmtDate(thread.recency_at))}</span>
+          ${thread.archived ? "<span>archived</span>" : ""}
+          ${missing ? `<span>${missing}</span>` : ""}
+        </div>
+        <div class="item-sub cwd">${escapeHtml(shortPath(thread.cwd))}</div>
+      </div>
+    `;
+  }).join("");
+}
+
+async function loadThread(threadId) {
+  state.selectedThreadId = threadId;
+  renderThreads(state.threads.length);
+  el.messages.innerHTML = `<div class="empty">Loading thread...</div>`;
+  const params = new URLSearchParams();
+  if (state.includeInternal) params.set("include_internal", "true");
+  const baseUrl = state.mode === "backup"
+    ? `/api/backups/${encodeURIComponent(state.selectedBackupDate)}/threads/${encodeURIComponent(threadId)}`
+    : `/api/threads/${encodeURIComponent(threadId)}`;
+  const data = await fetchJson(`${baseUrl}?${params.toString()}`);
+  state.selectedThread = data.thread;
+  renderThread(data);
+}
+
+function renderThread(data) {
+  const thread = data.thread;
+  el.threadTitle.textContent = thread.title || thread.id;
+  el.threadMeta.innerHTML = [
+    thread.id,
+    thread.cwd,
+    thread.model,
+    thread.source,
+    thread.git_branch ? `branch ${thread.git_branch}` : "",
+    `${data.counts.messages} messages`,
+    `${data.counts.tool_calls} tool calls`,
+    thread.size_bytes ? bytes(thread.size_bytes) : ""
+  ].filter(Boolean).map(escapeHtml).map(v => `<span>${v}</span>`).join("");
+
+  el.refreshThreadBtn.disabled = false;
+  el.scrollTopBtn.disabled = false;
+  el.scrollBottomBtn.disabled = false;
+  el.renameThreadBtn.disabled = state.mode === "backup";
+  el.copyResumeBtn.disabled = state.mode === "backup";
+  el.deleteThreadBtn.disabled = false;
+  el.rawLink.href = state.mode === "backup"
+    ? `/api/backups/${encodeURIComponent(state.selectedBackupDate)}/threads/${encodeURIComponent(thread.id)}/raw`
+    : `/api/threads/${encodeURIComponent(thread.id)}/raw`;
+  el.rawLink.style.pointerEvents = "auto";
+  el.rawLink.style.opacity = "1";
+
+  const warnings = (data.warnings || []).map(w => `<div class="warning">${escapeHtml(w)}</div>`).join("");
+  if (!data.events.length) {
+    el.messages.innerHTML = warnings || `<div class="empty">No displayable transcript events. Turn on Internal to inspect raw records.</div>`;
+    return;
+  }
+  el.messages.innerHTML = warnings + pairToolEvents(data.events).map(renderEvent).join("");
+}
+
+function pairToolEvents(events) {
+  const outputsByCallId = new Map();
+  for (const event of events) {
+    if (event.kind !== "tool_output" || !event.call_id) continue;
+    const outputs = outputsByCallId.get(event.call_id) || [];
+    outputs.push(event);
+    outputsByCallId.set(event.call_id, outputs);
+  }
+
+  const pairedOutputIds = new Set();
+  return events.flatMap(event => {
+    if (event.kind === "tool_call" && event.call_id) {
+      const outputs = outputsByCallId.get(event.call_id) || [];
+      for (const output of outputs) pairedOutputIds.add(output.id);
+      return [{ ...event, outputs }];
+    }
+    if (event.kind === "tool_output" && pairedOutputIds.has(event.id)) {
+      return [];
+    }
+    return [event];
+  });
+}
+
+function labelFor(event) {
+  if (event.kind === "tool_call") return `Tool call: ${event.name || "tool"}`;
+  if (event.kind === "tool_output") return "Tool output";
+  if (event.kind === "event") return event.name || "Event";
+  if (event.kind === "reasoning") return "Reasoning";
+  const phase = event.phase ? ` ${event.phase}` : "";
+  return `${event.role || "message"}${phase}`;
+}
+
+function renderEvent(event) {
+  const cls = event.kind === "message" ? event.role : event.kind;
+  const title = labelFor(event);
+  const stamp = [event.timestamp ? fmtDate(event.timestamp) : "", `line ${event.line}`].filter(Boolean).join(" | ");
+  const body = event.kind === "tool_call"
+    ? renderToolCallBody(event)
+    : event.kind === "tool_output"
+      ? `<details class="tool-section tool-output-section" open><summary>${escapeHtml(title)}</summary><pre>${escapeHtml(event.text)}</pre></details>`
+      : event.kind === "message"
+        ? renderMessageBody(event)
+        : `<pre>${escapeHtml(event.text)}</pre>`;
+  return `
+    <article class="msg msg-${escapeHtml(cls)}">
+      <div class="msg-head">
+        <span>${escapeHtml(title)}</span>
+        <span class="msg-line">${escapeHtml(stamp)}</span>
+      </div>
+      <div class="msg-body">${body}</div>
+    </article>
+  `;
+}
+
+function isRenderableImageSrc(src) {
+  return typeof src === "string" && (
+    src.startsWith("data:image/") ||
+    src.startsWith("http://") ||
+    src.startsWith("https://")
+  );
+}
+
+function renderMessageBody(event) {
+  const blocks = Array.isArray(event.blocks) && event.blocks.length
+    ? event.blocks
+    : [{ type: "text", text: event.text || "" }];
+
+  return `<div class="message-blocks">${blocks.map((block, index) => {
+    if (block.type === "image") {
+      if (!isRenderableImageSrc(block.src)) {
+        return `<pre>${escapeHtml("[input_image]")}</pre>`;
+      }
+      const label = `Open image ${index + 1}`;
+      return `
+        <div>
+          <img class="message-image" src="${escapeHtml(block.src)}" alt="Pasted image ${index + 1}" loading="lazy" />
+          <a class="message-image-link" href="${escapeHtml(block.src)}" target="_blank" rel="noreferrer">${escapeHtml(label)}</a>
+        </div>`;
+    }
+    return `<pre>${escapeHtml(block.text || "")}</pre>`;
+  }).join("")}</div>`;
+}
+
+function renderToolCallBody(event) {
+  const outputs = event.outputs || [];
+  const callId = event.call_id ? `<div class="tool-pair-meta">call_id: ${escapeHtml(event.call_id)}</div>` : "";
+  const inputBody = renderToolInput(event);
+  const args = `
+    <details class="tool-section" open>
+      <summary>${event.name === "apply_patch" ? "Patch" : "Input / arguments"}</summary>
+      ${inputBody}
+    </details>`;
+  const outputHtml = outputs.length
+    ? outputs.map(output => `
+      <details class="tool-section tool-output-section" open>
+        <summary>Output for ${escapeHtml(event.name || "tool")} · line ${escapeHtml(output.line)}</summary>
+        <pre>${escapeHtml(output.text)}</pre>
+      </details>
+    `).join("")
+    : `<div class="tool-pair-meta">No matching output record found.</div>`;
+  return callId + args + outputHtml;
+}
+
+function renderToolInput(event) {
+  if (event.name === "apply_patch" || String(event.text || "").startsWith("*** Begin Patch")) {
+    return renderPatch(event.text || "");
+  }
+  return `<pre>${escapeHtml(event.text)}</pre>`;
+}
+
+function patchLineClass(line) {
+  if (line.startsWith("+")) return "patch-add";
+  if (line.startsWith("-")) return "patch-del";
+  if (line.startsWith("@@")) return "patch-hunk";
+  if (line.startsWith("*** Add File:") || line.startsWith("*** Update File:") || line.startsWith("*** Delete File:") || line.startsWith("*** Move to:")) return "patch-file";
+  if (line.startsWith("***")) return "patch-meta";
+  return "";
+}
+
+function renderPatch(text) {
+  const lines = String(text || "").split("\n");
+  return `<div class="patch-view">${lines.map((line, index) => `
+    <div class="patch-row ${patchLineClass(line)}">
+      <div class="patch-gutter">${index + 1}</div>
+      <div class="patch-code">${escapeHtml(line || " ")}</div>
+    </div>
+  `).join("")}</div>`;
+}
+
+function selectProject(cwd) {
+  state.selectedCwd = cwd;
+  clearSelectedThread("Choose a thread to inspect Codex history.");
+  renderProjects();
+  loadThreads().catch(showError);
+}
+
+function clearSelectedThread(message) {
+  state.selectedThreadId = "";
+  state.selectedThread = null;
+  closeRenameModal();
+  el.threadTitle.textContent = "Select a thread";
+  el.threadMeta.innerHTML = "";
+  el.messages.innerHTML = `<div class="empty">${escapeHtml(message)}</div>`;
+  el.refreshThreadBtn.disabled = true;
+  el.scrollTopBtn.disabled = true;
+  el.scrollBottomBtn.disabled = true;
+  el.renameThreadBtn.disabled = true;
+  el.copyResumeBtn.disabled = true;
+  el.deleteThreadBtn.disabled = true;
+  el.rawLink.removeAttribute("href");
+  el.rawLink.style.pointerEvents = "none";
+  el.rawLink.style.opacity = "0.55";
+}
+
+async function setMode(mode) {
+  if (state.mode === mode) return;
+  state.mode = mode;
+  state.selectedCwd = "";
+  state.selectedBackupDate = "";
+  state.selectedBackupProjectCwd = "";
+  state.backupProjects = [];
+  state.archived = mode === "backup" ? "all" : "active";
+  el.archiveFilter.value = state.archived;
+  el.liveModeBtn.classList.toggle("active", mode === "live");
+  el.backupModeBtn.classList.toggle("active", mode === "backup");
+  el.threadPanelTitle.textContent = mode === "backup" ? "Backup Projects" : "Threads";
+  clearSelectedThread(mode === "backup" ? "Select a backup date and project." : "Choose a project and thread to inspect Codex history.");
+
+  if (mode === "backup") {
+    await loadBackups();
+    if (state.backups.length) {
+      state.selectedBackupDate = state.backups[0].date;
+    }
+    renderProjects();
+    await loadBackupProjects();
+  } else {
+    await loadProjects();
+    await loadThreads();
+  }
+}
+
+function selectBackupDate(date) {
+  state.selectedBackupDate = date;
+  state.selectedBackupProjectCwd = "";
+  state.threads = [];
+  clearSelectedThread("Choose a backup project to inspect sessions.");
+  renderProjects();
+  loadBackupProjects().catch(showError);
+}
+
+function selectBackupProject(cwd) {
+  state.selectedBackupProjectCwd = cwd;
+  clearSelectedThread("Choose a backup session to inspect.");
+  loadThreads().catch(showError);
+}
+
+function showBackupProjects() {
+  state.selectedBackupProjectCwd = "";
+  clearSelectedThread("Choose a backup project to inspect sessions.");
+  renderBackupProjects();
+}
+
+function showError(error) {
+  console.error(error);
+  el.messages.innerHTML = `<div class="warning">${escapeHtml(error.message || error)}</div>`;
+}
+
+function setRenameError(message) {
+  el.renameError.textContent = message || "";
+}
+
+function openRenameModal() {
+  if (!state.selectedThread || state.mode === "backup") return;
+  setRenameError("");
+  el.renameInput.value = state.selectedThread.title || "";
+  el.renameModal.classList.add("open");
+  setTimeout(() => {
+    el.renameInput.focus();
+    el.renameInput.select();
+  }, 50);
+}
+
+function closeRenameModal() {
+  el.renameModal.classList.remove("open");
+  setRenameError("");
+}
+
+async function submitRename() {
+  if (!state.selectedThread || state.mode === "backup") return;
+  const currentTitle = state.selectedThread.title || "";
+  const cleanTitle = el.renameInput.value.trim().replace(/\s+/g, " ");
+  if (!cleanTitle) {
+    setRenameError("Title cannot be empty.");
+    return;
+  }
+  if (cleanTitle === currentTitle) {
+    closeRenameModal();
+    return;
+  }
+
+  el.renameConfirmBtn.disabled = true;
+  setRenameError("");
+  try {
+    const data = await fetchJson(`/api/threads/${encodeURIComponent(state.selectedThread.id)}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ title: cleanTitle })
+    });
+    state.selectedThread = data.thread;
+    state.threads = state.threads.map(thread =>
+      thread.id === data.thread.id ? { ...thread, title: data.thread.title } : thread
+    );
+    el.threadTitle.textContent = data.thread.title || data.thread.id;
+    renderThreads(state.threads.length);
+    closeRenameModal();
+  } catch (error) {
+    setRenameError(error.message || "Rename failed.");
+  } finally {
+    el.renameConfirmBtn.disabled = false;
+    el.renameThreadBtn.disabled = state.mode === "backup" || !state.selectedThread;
+  }
+}
+
+function scrollContentToTop() {
+  el.content.scrollTo({ top: 0, behavior: "smooth" });
+}
+
+function scrollContentToBottom() {
+  el.content.scrollTo({ top: el.content.scrollHeight, behavior: "smooth" });
+}
+
+function refreshSelectedThread() {
+  if (!state.selectedThreadId) return;
+  loadThread(state.selectedThreadId).catch(showError);
+}
+
+let searchTimer = null;
+let refreshTimer = null;
+el.searchInput.addEventListener("input", () => {
+  state.query = el.searchInput.value.trim();
+  clearTimeout(searchTimer);
+  searchTimer = setTimeout(() => {
+    if (state.mode === "backup" && state.selectedBackupDate && !state.selectedBackupProjectCwd) {
+      renderBackupProjects();
+      return;
+    }
+    loadThreads().catch(showError);
+  }, 180);
+});
+
+el.archiveFilter.addEventListener("change", () => {
+  state.archived = el.archiveFilter.value;
+  state.selectedThreadId = "";
+  if (state.mode === "backup" && state.selectedBackupDate && !state.selectedBackupProjectCwd) {
+    renderBackupProjects();
+    return;
+  }
+  loadThreads().catch(showError);
+});
+
+el.internalToggle.addEventListener("change", () => {
+  state.includeInternal = el.internalToggle.checked;
+  if (state.selectedThreadId) loadThread(state.selectedThreadId).catch(showError);
+});
+
+el.projectList.addEventListener("click", event => {
+  const item = event.target.closest(".project-item");
+  if (!item) return;
+  if (state.mode === "backup") {
+    selectBackupDate(item.dataset.date || "");
+  } else {
+    selectProject(item.dataset.cwd || "");
+  }
+});
+
+el.threadList.addEventListener("click", event => {
+  const back = event.target.closest(".backup-project-back");
+  if (back) {
+    showBackupProjects();
+    return;
+  }
+
+  const project = event.target.closest(".backup-project-item");
+  if (project) {
+    selectBackupProject(project.dataset.cwd || "");
+    return;
+  }
+
+  const item = event.target.closest(".thread-item");
+  if (!item) return;
+  loadThread(item.dataset.id).catch(showError);
+});
+
+el.allProjectsBtn.addEventListener("click", () => selectProject(""));
+
+el.liveModeBtn.addEventListener("click", () => {
+  setMode("live").catch(showError);
+});
+
+el.backupModeBtn.addEventListener("click", () => {
+  setMode("backup").catch(showError);
+});
+
+el.copyResumeBtn.addEventListener("click", async () => {
+  if (!state.selectedThread) return;
+  await navigator.clipboard.writeText(state.selectedThread.resume_command);
+  const old = el.copyResumeBtn.textContent;
+  el.copyResumeBtn.textContent = "Copied";
+  setTimeout(() => { el.copyResumeBtn.textContent = old; }, 900);
+});
+
+el.refreshThreadBtn.addEventListener("click", refreshSelectedThread);
+el.scrollTopBtn.addEventListener("click", scrollContentToTop);
+el.scrollBottomBtn.addEventListener("click", scrollContentToBottom);
+el.renameThreadBtn.addEventListener("click", openRenameModal);
+el.renameCancelBtn.addEventListener("click", closeRenameModal);
+el.renameConfirmBtn.addEventListener("click", submitRename);
+el.renameModal.addEventListener("click", event => {
+  if (event.target === el.renameModal) closeRenameModal();
+});
+el.renameInput.addEventListener("keydown", event => {
+  if (event.key === "Enter") submitRename();
+  if (event.key === "Escape") closeRenameModal();
+});
+
+el.deleteThreadBtn.addEventListener("click", async () => {
+  if (!state.selectedThread) return;
+  const target = state.selectedThread;
+  const location = state.mode === "backup" ? `backup ${state.selectedBackupDate}` : "live Codex history";
+  const ok = confirm(`Delete this thread from ${location}?\n\n${target.title || target.id}\n\nThis cannot be undone.`);
+  if (!ok) return;
+
+  el.deleteThreadBtn.disabled = true;
+  try {
+    const url = state.mode === "backup"
+      ? `/api/backups/${encodeURIComponent(state.selectedBackupDate)}/threads/${encodeURIComponent(target.id)}`
+      : `/api/threads/${encodeURIComponent(target.id)}`;
+    await fetchJson(url, { method: "DELETE" });
+    clearSelectedThread("Thread deleted.");
+    await Promise.all([
+      loadStatus(),
+      state.mode === "backup" ? loadBackups() : loadProjects(),
+      refreshBackupMiddle()
+    ]);
+  } catch (error) {
+    showError(error);
+  } finally {
+    el.deleteThreadBtn.disabled = !state.selectedThread;
+  }
+});
+
+el.backupBtn.addEventListener("click", async () => {
+  el.backupBtn.disabled = true;
+  el.backupBtn.textContent = "Backing up...";
+  try {
+    await fetchJson("/api/backups/run", { method: "POST" });
+    await loadStatus();
+    if (state.mode === "backup") {
+      await loadBackups();
+      await refreshBackupMiddle();
+    }
+  } catch (error) {
+    showError(error);
+  } finally {
+    el.backupBtn.textContent = "Backup now";
+    el.backupBtn.disabled = false;
+  }
+});
+
+function connectWs() {
+  const proto = location.protocol === "https:" ? "wss" : "ws";
+  const ws = new WebSocket(`${proto}://${location.host}/ws`);
+  ws.addEventListener("open", () => el.wsDot.classList.add("connected"));
+  ws.addEventListener("close", () => {
+    el.wsDot.classList.remove("connected");
+    setTimeout(connectWs, 1500);
+  });
+  ws.addEventListener("message", event => {
+    let msg = null;
+    try {
+      msg = JSON.parse(event.data);
+    } catch {
+      return;
+    }
+    if (msg.type !== "refresh") return;
+
+    clearTimeout(refreshTimer);
+    refreshTimer = setTimeout(() => {
+      const sideList = state.mode === "backup" ? loadBackups() : loadProjects();
+      Promise.all([loadStatus(), sideList, refreshBackupMiddle()]).catch(error => {
+        console.error(error);
+      });
+      // Match the Claude viewer: do not auto-refresh the open transcript.
+      // This keeps scroll position and expanded tool blocks stable while reading.
+    }, 1500);
+  });
+}
+
+async function init() {
+  try {
+    await loadStatus();
+    await loadProjects();
+    await loadThreads();
+    connectWs();
+  } catch (error) {
+    showError(error);
+    el.status.textContent = "Unable to load Codex state";
+  }
+}
+
+init();
 </script>
 </body>
 </html>
